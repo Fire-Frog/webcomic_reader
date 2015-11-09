@@ -43,7 +43,7 @@ var defaultSettings = {
 // ==UserScript==
 // @name           Webcomic Reader
 // @author         Javier Lopez <ameboide@gmail.com> https://github.com/ameboide , fork by v4Lo https://github.com/v4Lo
-// @version        2015.10.13
+// @version        2015.10.13-1
 // @namespace      http://userscripts.org/scripts/show/59842
 // @description    Can work on almost any webcomic/manga page, preloads 5 or more pages ahead (or behind), navigates via ajax for instant-page-change, lets you use the keyboard, remembers your progress, and it's relatively easy to add new sites
 // @homepageURL    https://github.com/v4Lo/webcomic_reader#readme
@@ -495,7 +495,7 @@ var defaultSettings = {
 // @include        http://goldenagecomics.co.uk/*
 // @include        http://fourcolorshadows.blogspot.com/*
 // @include        http://thehorrorsofitall.blogspot.com/*
-// @include        http://bato.to/*
+// @include        http://bato.to/reader*
 // @include        http://www.eegra.com/*
 // @include        http://www.octopuspie.com/*
 // @include        http://www.lovemenicecomic.com/*
@@ -575,7 +575,7 @@ var defaultSettings = {
 // @include        http://psychopandas.com/reader/*
 // @include        http://www.ourmanga.com/*
 // @include        http://readonline.egscans.org/*
-// @include        http://read.egscans.org/*
+// @include        http://read.egscans.com/*
 // @include        http://reader.eternalmanga.net/*
 // @include        http://gallery.ryuutama.com/*
 // @include        http://*.tiraecol.net/*
@@ -787,6 +787,9 @@ var defaultSettings = {
 // @include        http://extrafabulouscomics.com/*
 // @include        http://hellocomic.com/*
 // @include        http://*.hellocomic.com/*
+// @include        http://www.feywinds.com/comic/*
+// @include        http://www.omgbeaupeep.com/*
+// @include        http://orgymania.net/*
 // ==/UserScript==
 
 var dataCache = null; //cache para no leer del disco y parsear la configuracion en cada getData
@@ -2506,23 +2509,57 @@ var paginas = [
 				}],
 		layelem:'//div[@id="header-wrapper"]'
 	},
-	{	url:	'bato.to',
-		img:	[['#comic_page']],
-		back:	function(html, pos){
-					try{ return xpath('//a[img[@title="Previous Page"]]', html); }
-					catch(e){ return xpath('//a[img[@title="Previous Chapter"]]', html); }
-				},
-		next:	function(html, pos){
-					try{ return xpath('//a[img[@title="Next Page"]]', html); }
-					catch(e){ return xpath('//a[img[@title="Next Chapter"]]', html); }
-				},
+	{	url:	'bato.to/reader',
+		img:	function(html, pos) {
+			try {
+				return selCss("#comic_page", html, 0);
+			} catch (e) { // Not loaded yet
+				if (pos == 0) setTimeout(run_script, 2000);
+				throw e;
+			}
+		},
+		back:	function(html, pos) {
+			var url;
+			try {
+				url = xpath('//a[img[@title="Previous Page"]]', html).href;
+			} catch (e) {
+				url = xpath('//a[img[@title="Previous Chapter"]]', html).href;
+			}
+
+			url2 = url.replace(/#[^_]*$/, "$&_1").replace("reader#", "areader?id=").replace("_", "&p=");
+			var both = [url, url2];
+			both.doubleLink = true;
+			return both;
+		},
+		next:	function(html, pos) {
+			var url;
+			try {
+				url = xpath('//a[img[@title="Next Page"]]', html).href;
+			} catch (e) {
+				url = xpath('//a[img[@title="Next Chapter"]]', html).href;
+			}
+			url2 = url.replace(/#[^_]*$/, "$&_1").replace("reader#", "areader?id=").replace("_", "&p=");
+			var both = [url, url2];
+			both.doubleLink = true;
+
+			return both;
+		},
 		extra:	[['//img[@id="comic_page" and not(./ancestor::div[contains(@style, "display: none;")])]', '<br/>', 1],
 					[['.moderation_bar']]],
-		fixurl:	function(url, img, link){
+		fixurl:	function(url, img, link) {
 					if(img) return encodeURI(url);
 					return url;
 				},
 		layelem:'//img[@id="comic_page"]',
+		js:	function(dir) {
+			if (dir == 0 && typeof(link[0]) == 'string') {
+				url = link[0];
+				url2 = url.replace(/#[^_]*$/, "$&_1").replace("reader#", "areader?id=").replace("_", "&p=");
+				var both0 = [url, url2];
+				both0.doubleLink = true;
+				link[0] = both0;
+			}
+		},
 		scrollx:'R'
 	},
 	{	url:	'nedroid.com',
@@ -2795,7 +2832,7 @@ var paginas = [
 		style:	'.imgPage span{display:none !important;}',
 		scrollx:'R'
 	},
-	{	url:	'readonline.egscans.org|read.egscans.org',
+	{	url:	'readonline.egscans.org|read.egscans.com',
 		img:	function(html, pos){
 					var num = link[pos].match(/(##.*_|\/)(\d+)$/);
 					num = num ? parseInt(num[2])-1 : 0;
@@ -3901,7 +3938,37 @@ var paginas = [
 		img:	[['.coverIssue a img']],
 		back:	[['.prevBtn']],
 		next:	[['.nextBtn']]
-	}
+	},
+	{	url:	'feywinds.com/comic',
+		img:	'../comic/pages'
+	},
+	{   url:    'omgbeaupeep.com',
+		img:    [['#omv .picture']],
+		back: function(html, pos) {
+			try {
+				return xpath('//a[img[@alt="Previous Page"]]/@href', html);
+			} catch (e) {
+				var currChapter = xpath('//select[@name="chapter"]/*[@selected]', html);
+				return link[pos].replace(currChapter.value, currChapter.previousSibling.value);
+			}
+		},
+		next: function(html, pos) {
+			try {
+				return xpath('//a[img[@alt="Next Page"]]/@href', html);
+			} catch (e) {
+				var currChapter = xpath('//select[@name="chapter"]/*[@selected]', html);
+				return link[pos].replace(currChapter.value, currChapter.nextSibling.value).replace(/\/[^\/]*$/, "/1");
+			}
+		},
+	    extra: [[[".pager"]]],
+	},
+ 	{
+		url:	'orgymania.net',
+		img:	'/slippreview/',
+		back:	'text()="< prev"',
+		next:	'text()="next >"',
+		first:	'text()="|<"',
+	},
 	/*
 	,
 	{	url:	'',
@@ -4411,8 +4478,11 @@ function setear(html, pos, dir){
 		catch(ex){
 			try{ titulo[pos] = match(html, /<title>(.+?)<\/title>/i, 1); }
 			catch(e){
-				error('set['+pos+']/titulo: '+e);
-				titulo[pos] = link[pos];
+                try{ titulo[pos] = match(html, /document.title = '([^']+?)'/, 1); }
+                catch(e){
+                    error('set['+pos+']/titulo: '+e);
+                    titulo[pos] = link[pos];
+                }
 			}
 		}
 
@@ -4442,7 +4512,7 @@ function setear(html, pos, dir){
 //saca el link, y si me llega un <a> le saco el href
 function getLink(pag, getter, pos){
 	var linkpag = contenido(pag, getter, pos);
-	if(linkpag && typeof(linkpag)=='object' && !linkpag.href) //array[url, postdata]
+	if(linkpag && typeof(linkpag)=='object' && !linkpag.href) //array[url, postdata] or array[showUrl,usedUrl]
 		return linkpag;
 	if(linkpag && linkpag.href) //<a href=...>...<a/>
 		linkpag = linkpag.href;
@@ -4522,14 +4592,18 @@ function cambiaPag(dir, poppedState, slidden){
 		get('wcr_btn-1').innerHTML = 'Back ('+(posActual-maxok)+(link[maxok-1]?(imagen[maxok-1]===null?'...':''):'!')+')';
 
 		if(useHistoryAPI && history.pushState && !poppedState){
+			var url = link[posActual];
+			if(typeof(url)=='object' && url.doubleLink){
+				url = url[0];
+			}
 			if(dir) history.pushState(
-				{wcr_url: link[posActual], wcr_pos: posActual},
+				{wcr_url: url, wcr_pos: posActual},
 				titulo[posActual],
-				link[posActual]);
+				url);
 			else history.replaceState(
-				{wcr_url: link[posActual], wcr_pos: posActual},
+				{wcr_url: url, wcr_pos: posActual},
 				titulo[posActual],
-				link[posActual]);
+				url);
 		}
 
 		try{ if(funcionJs) funcionJs(dir); }
@@ -4721,6 +4795,10 @@ function prefetch(dir, pos, prof, reintento){
 	var url = link[pos];
 	var meth = 'GET';
 	var pars = null;
+	if(typeof(url)=='object' && url.doubleLink){ // Para paginas con AJAX 
+		url = url[1];
+	}
+        
 	if(typeof(url)=='object'){
 		pars = url[1];
 		url = url[0];
@@ -5196,6 +5274,12 @@ function redirect(url){
 		document.location.href = url.split('#')[0];
 		return;
 	}
+    
+	if(typeof(url)=='object' && url.doubleLink && false){
+		window.location.href = url[0];
+		document.location.reload();
+		return;
+	}
 
 	form = document.createElement('form');
 	form.method = 'POST';
@@ -5371,7 +5455,11 @@ function addBookmark(evt){
 	for(var i=0;i<lista.length;i++){
 		if(lista[i]['url']==link[posActual]) return;
 	}
-	var item = {url: link[posActual], title: titulo[posActual]};
+	var url = link[posActual];
+	if(typeof(url)=='object' && url.doubleLink){
+		url = url[0];
+	}
+	var item = {url: url, title: titulo[posActual]};
 	lista.push(item);
 	addLista(item);
 
